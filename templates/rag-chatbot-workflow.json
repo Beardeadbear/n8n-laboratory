@@ -1,0 +1,222 @@
+{
+  "name": "RAG Chatbot for Company Documents",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat",
+        "responseMode": "respondToWebhook",
+        "options": {}
+      },
+      "id": "chat-trigger",
+      "name": "Chat Trigger",
+      "type": "n8n-nodes-base.chatTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "chat-webhook"
+    },
+    {
+      "parameters": {
+        "operation": "createEmbedding",
+        "model": "text-embedding-ada-002",
+        "input": "={{ $json.question }}",
+        "options": {}
+      },
+      "id": "question-embedding",
+      "name": "Question Embedding",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credential",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "collectionName": "company_documents",
+        "vector": "={{ $json.data[0].embedding }}",
+        "limit": 5,
+        "scoreThreshold": 0.7,
+        "options": {}
+      },
+      "id": "vector-search",
+      "name": "Vector Search",
+      "type": "n8n-nodes-base.qdrant",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "qdrantApi": {
+          "id": "qdrant-credential",
+          "name": "Qdrant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const question = $input.first().json.question;\nconst searchResults = $input.first().json.results;\n\n// Extract relevant document chunks\nconst relevantChunks = searchResults.map(result => ({\n  content: result.payload.content,\n  fileName: result.payload.fileName,\n  score: result.score\n}));\n\n// Create context for AI\nconst context = relevantChunks\n  .map(chunk => `Document: ${chunk.fileName}\\nContent: ${chunk.content}\\n---`)\n  .join('\\n');\n\n// Create system prompt\nconst systemPrompt = `You are a helpful AI assistant for company employees. \\nAnswer questions based on the provided company documents. \\nIf the information is not in the documents, say so clearly.\\nAlways cite the source document when possible.\\n\\nCompany Documents Context:\\n${context}\\n\\nUser Question: ${question}\\n\\nPlease provide a clear, helpful answer based on the documents above.`;\n\nreturn {\n  json: {\n    systemPrompt: systemPrompt,\n    userQuestion: question,\n    relevantDocuments: relevantChunks.map(chunk => chunk.fileName)\n  }\n};"
+      },
+      "id": "context-assembly",
+      "name": "Context Assembly",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "chat",
+        "model": "gpt-3.5-turbo",
+        "messages": {
+          "messageValues": [
+            {
+              "role": "system",
+              "content": "={{ $json.systemPrompt }}"
+            },
+            {
+              "role": "user",
+              "content": "={{ $json.userQuestion }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 1000
+        }
+      },
+      "id": "ai-response",
+      "name": "AI Response",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credential",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiResponse = $input.first().json.choices[0].message.content;\nconst documents = $input.first().json.relevantDocuments;\n\n// Format response for chat\nconst formattedResponse = `${aiResponse}\\n\\n${documents.length > 0 ? `\\n📚 Sources: ${documents.join(', ')}` : ''}`;\n\nreturn {\n  json: {\n    response: formattedResponse,\n    plainText: aiResponse,\n    sources: documents\n  }\n};"
+      },
+      "id": "response-formatting",
+      "name": "Response Formatting",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.plainText }}",
+        "options": {}
+      },
+      "id": "respond-to-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Question Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Question Embedding": {
+      "main": [
+        [
+          {
+            "node": "Vector Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vector Search": {
+      "main": [
+        [
+          {
+            "node": "Context Assembly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Context Assembly": {
+      "main": [
+        [
+          {
+            "node": "AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Response": {
+      "main": [
+        [
+          {
+            "node": "Response Formatting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Response Formatting": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "rag-chatbot",
+      "name": "RAG Chatbot"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

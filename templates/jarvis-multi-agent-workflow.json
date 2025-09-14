@@ -1,0 +1,508 @@
+{
+  "name": "J.A.R.V.I.S Multi-Agent System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "J.A.R.V.I.S Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "jarvis-input"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "user_input",
+              "value": "={{ $json.body.message || $json.body.text || $json.body.input }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.body.user_id || 'anonymous' }}"
+            },
+            {
+              "name": "session_id",
+              "value": "={{ $json.body.session_id || $json.headers['x-session-id'] || 'default' }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "input-processor",
+      "name": "Input Processor",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 1000
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Input Processing Agent. Your role is to:\n\n1. Analyze user input and understand intent\n2. Categorize the request type (question, task, command, etc.)\n3. Extract key information and parameters\n4. Determine which specialized agent should handle this request\n5. Prepare context for the next agent\n\nAvailable agent types:\n- RESEARCH: For information gathering and analysis\n- CREATIVE: For content creation and creative tasks\n- TECHNICAL: For technical problem solving\n- PLANNING: For task planning and project management\n- COMMUNICATION: For email, messaging, and communication tasks\n\nRespond with JSON format:\n{\n  \"intent\": \"category of the request\",\n  \"agent_type\": \"RESEARCH|CREATIVE|TECHNICAL|PLANNING|COMMUNICATION\",\n  \"extracted_info\": \"key information from the request\",\n  \"complexity\": \"SIMPLE|MODERATE|COMPLEX\",\n  \"context\": \"prepared context for the next agent\"\n}",
+              "role": "system"
+            },
+            {
+              "content": "User Input: {{ $json.user_input }}\nUser ID: {{ $json.user_id }}\nSession: {{ $json.session_id }}\nTimestamp: {{ $json.timestamp }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "input-agent",
+      "name": "Input Processing Agent (GPT-4)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.agent_type }}",
+              "operation": "equal",
+              "value2": "RESEARCH"
+            }
+          ]
+        }
+      },
+      "id": "agent-router",
+      "name": "Agent Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 1500
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Research Agent. Your role is to:\n\n1. Gather comprehensive information on the requested topic\n2. Analyze data from multiple sources\n3. Provide accurate, well-researched answers\n4. Include relevant citations and sources\n5. Identify knowledge gaps and suggest further research\n\nUse your knowledge base and provide detailed, factual responses. If you need to search for current information, indicate that in your response.",
+              "role": "system"
+            },
+            {
+              "content": "Research Request: {{ $json.context }}\nOriginal Input: {{ $json.user_input }}\nComplexity: {{ $json.complexity }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "research-agent",
+      "name": "Research Agent (GPT-4)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "model": "claude-3-sonnet",
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 2000
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Creative Agent. Your role is to:\n\n1. Generate creative content (writing, ideas, solutions)\n2. Provide innovative approaches to problems\n3. Create engaging and original content\n4. Offer creative alternatives and suggestions\n5. Ensure content is original and well-crafted\n\nBe creative, innovative, and engaging in your responses.",
+              "role": "system"
+            },
+            {
+              "content": "Creative Request: {{ $json.context }}\nOriginal Input: {{ $json.user_input }}\nComplexity: {{ $json.complexity }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "creative-agent",
+      "name": "Creative Agent (Claude)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 1500
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Technical Agent. Your role is to:\n\n1. Solve technical problems and provide solutions\n2. Debug code and technical issues\n3. Provide step-by-step technical guidance\n4. Explain complex technical concepts clearly\n5. Offer best practices and recommendations\n\nBe precise, technical, and solution-oriented in your responses.",
+              "role": "system"
+            },
+            {
+              "content": "Technical Request: {{ $json.context }}\nOriginal Input: {{ $json.user_input }}\nComplexity: {{ $json.complexity }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "technical-agent",
+      "name": "Technical Agent (GPT-4)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "model": "gemini-pro",
+        "options": {
+          "temperature": 0.4,
+          "maxTokens": 1800
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Planning Agent. Your role is to:\n\n1. Break down complex tasks into manageable steps\n2. Create detailed project plans and timelines\n3. Identify dependencies and potential obstacles\n4. Suggest resource allocation and priorities\n5. Provide actionable next steps\n\nBe strategic, organized, and practical in your planning approach.",
+              "role": "system"
+            },
+            {
+              "content": "Planning Request: {{ $json.context }}\nOriginal Input: {{ $json.user_input }}\nComplexity: {{ $json.complexity }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "planning-agent",
+      "name": "Planning Agent (Gemini)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.5,
+          "maxTokens": 1200
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Communication Agent. Your role is to:\n\n1. Draft professional emails and messages\n2. Handle communication tasks and scheduling\n3. Provide diplomatic and tactful responses\n4. Manage stakeholder communications\n5. Ensure clear and effective messaging\n\nBe professional, clear, and contextually appropriate in your communications.",
+              "role": "system"
+            },
+            {
+              "content": "Communication Request: {{ $json.context }}\nOriginal Input: {{ $json.user_input }}\nComplexity: {{ $json.complexity }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "communication-agent",
+      "name": "Communication Agent (GPT-4)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 600]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "agent_response",
+              "value": "={{ $json.message.content }}"
+            },
+            {
+              "name": "agent_type",
+              "value": "={{ $json.agent_type }}"
+            },
+            {
+              "name": "original_input",
+              "value": "={{ $json.user_input }}"
+            },
+            {
+              "name": "processing_time",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "response-processor",
+      "name": "Response Processor",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.6,
+          "maxTokens": 1000
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Response Generation Agent. Your role is to:\n\n1. Format the specialized agent's response into a natural, conversational reply\n2. Ensure the response is clear, helpful, and engaging\n3. Add appropriate context and explanations\n4. Maintain J.A.R.V.I.S personality (helpful, intelligent, professional)\n5. Include relevant follow-up suggestions when appropriate\n\nTransform the technical response into a user-friendly format while maintaining accuracy and completeness.",
+              "role": "system"
+            },
+            {
+              "content": "Agent Response: {{ $json.agent_response }}\nAgent Type: {{ $json.agent_type }}\nOriginal Input: {{ $json.original_input }}\n\nPlease format this into a natural, helpful response that maintains J.A.R.V.I.S personality.",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "response-agent",
+      "name": "Response Generation Agent (GPT-4)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "final_response",
+              "value": "={{ $json.message.content }}"
+            },
+            {
+              "name": "agent_used",
+              "value": "={{ $json.agent_type }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "output-formatter",
+      "name": "Output Formatter",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.final_response }}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "J.A.R.V.I.S Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "input-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "input-processor": {
+      "main": [
+        [
+          {
+            "node": "input-agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "input-agent": {
+      "main": [
+        [
+          {
+            "node": "agent-router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agent-router": {
+      "main": [
+        [
+          {
+            "node": "research-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "creative-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "technical-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "planning-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "communication-agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "research-agent": {
+      "main": [
+        [
+          {
+            "node": "response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "creative-agent": {
+      "main": [
+        [
+          {
+            "node": "response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "technical-agent": {
+      "main": [
+        [
+          {
+            "node": "response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "planning-agent": {
+      "main": [
+        [
+          {
+            "node": "response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "communication-agent": {
+      "main": [
+        [
+          {
+            "node": "response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "response-processor": {
+      "main": [
+        [
+          {
+            "node": "response-agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "response-agent": {
+      "main": [
+        [
+          {
+            "node": "output-formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "output-formatter": {
+      "main": [
+        [
+          {
+            "node": "webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "jarvis",
+      "name": "J.A.R.V.I.S"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
+
+
+
+
+
+
+
+
+

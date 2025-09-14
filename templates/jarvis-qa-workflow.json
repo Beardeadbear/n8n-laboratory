@@ -1,0 +1,652 @@
+{
+  "name": "J.A.R.V.I.S QA Automation System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis-qa",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "qa-webhook-trigger",
+      "name": "QA Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "jarvis-qa-input"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "user_input",
+              "value": "={{ $json.body.message || $json.body.text || $json.body.input }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.body.user_id || 'qa_engineer' }}"
+            },
+            {
+              "name": "session_id",
+              "value": "={{ $json.body.session_id || 'qa_session' }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "qa_context",
+              "value": "={{ $json.body.qa_context || 'general' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "qa-input-processor",
+      "name": "QA Input Processor",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 1500
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S QA Task Classifier. Your role is to analyze QA-related requests and route them to the appropriate specialized agent.\n\nAvailable QA routing options:\n- BUG_REPORT: For creating comprehensive bug reports\n- TEST_PLAN: For writing detailed test plans and strategies\n- CHECKLIST: For creating QA checklists and procedures\n- JIRA_MANAGEMENT: For checking, updating, and managing Jira tickets\n- SLACK_COMMUNICATION: For drafting Slack messages and team communication\n- TEST_EXECUTION: For executing automated tests using MCP tools\n- QA_ANALYSIS: For analyzing test results and quality metrics\n- DOCUMENTATION: For creating QA documentation and guides\n\nRespond with JSON format:\n{\n  \"qa_task\": \"clear description of the QA task\",\n  \"agent_type\": \"BUG_REPORT|TEST_PLAN|CHECKLIST|JIRA_MANAGEMENT|SLACK_COMMUNICATION|TEST_EXECUTION|QA_ANALYSIS|DOCUMENTATION\",\n  \"priority\": \"LOW|MEDIUM|HIGH|CRITICAL\",\n  \"estimated_effort\": \"1-2 hours|Half day|Full day|Multiple days\",\n  \"required_tools\": [\"list of tools needed\"],\n  \"success_criteria\": \"how to measure success\"\n}",
+              "role": "system"
+            },
+            {
+              "content": "QA Request: {{ $json.user_input }}\nUser ID: {{ $json.user_id }}\nSession: {{ $json.session_id }}\nQA Context: {{ $json.qa_context }}\nTimestamp: {{ $json.timestamp }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "qa-task-classifier",
+      "name": "QA Task Classifier (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.agent_type }}",
+              "operation": "equal",
+              "value2": "BUG_REPORT"
+            }
+          ]
+        }
+      },
+      "id": "qa-agent-router",
+      "name": "QA Agent Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 2000
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Bug Report Agent. Your role is to create comprehensive, professional bug reports.\n\nCreate detailed bug reports including:\n- **Summary**: Clear, concise bug description\n- **Environment**: OS, browser, device, version details\n- **Steps to Reproduce**: Detailed step-by-step instructions\n- **Expected Result**: What should happen\n- **Actual Result**: What actually happens\n- **Severity**: Critical/High/Medium/Low\n- **Priority**: P1/P2/P3/P4\n- **Screenshots/Logs**: References to attachments\n- **Workaround**: If available\n- **Additional Notes**: Any relevant context\n\nFormat as a professional bug report ready for Jira or similar tools.",
+              "role": "system"
+            },
+            {
+              "content": "Bug Report Request: {{ $json.qa_task }}\nPriority: {{ $json.priority }}\nContext: {{ $json.qa_context }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "bug-report-agent",
+      "name": "Bug Report Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 100]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 2500
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Test Plan Agent. Your role is to create comprehensive test plans and strategies.\n\nCreate detailed test plans including:\n- **Test Objective**: Clear purpose and scope\n- **Test Scope**: What will be tested and what won't\n- **Test Strategy**: Approach and methodology\n- **Test Cases**: Detailed test scenarios with steps\n- **Test Data**: Required data and setup\n- **Environment Requirements**: Test environment specifications\n- **Risk Assessment**: Potential risks and mitigation\n- **Timeline**: Estimated duration and milestones\n- **Success Criteria**: Definition of done\n- **Resource Requirements**: Team and tools needed\n\nFormat as a professional test plan document.",
+              "role": "system"
+            },
+            {
+              "content": "Test Plan Request: {{ $json.qa_task }}\nPriority: {{ $json.priority }}\nContext: {{ $json.qa_context }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "test-plan-agent",
+      "name": "Test Plan Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 1800
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Checklist Agent. Your role is to create comprehensive QA checklists and procedures.\n\nCreate detailed checklists including:\n- **Pre-Release Checklist**: Items to verify before release\n- **Feature Testing Checklist**: Specific feature validation\n- **Regression Testing Checklist**: Core functionality verification\n- **Performance Testing Checklist**: Performance validation items\n- **Security Testing Checklist**: Security verification points\n- **Accessibility Checklist**: A11y compliance items\n- **Cross-Browser Checklist**: Browser compatibility items\n- **Mobile Testing Checklist**: Mobile device validation\n- **API Testing Checklist**: API endpoint verification\n- **Database Testing Checklist**: Data integrity validation\n\nFormat as actionable, checkable items with clear criteria.",
+              "role": "system"
+            },
+            {
+              "content": "Checklist Request: {{ $json.qa_task }}\nPriority: {{ $json.priority }}\nContext: {{ $json.qa_context }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "checklist-agent",
+      "name": "Checklist Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 2000
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Jira Management Agent. Your role is to help with Jira ticket management and analysis.\n\nProvide Jira assistance including:\n- **Ticket Analysis**: Review and analyze existing tickets\n- **Ticket Creation**: Create new tickets with proper formatting\n- **Status Updates**: Suggest status changes and transitions\n- **Priority Assessment**: Evaluate and suggest priority levels\n- **Sprint Planning**: Help with sprint organization\n- **Bug Triage**: Categorize and prioritize bugs\n- **Progress Tracking**: Monitor ticket progress and metrics\n- **Reporting**: Generate status reports and summaries\n\nFormat responses as actionable Jira management guidance.",
+              "role": "system"
+            },
+            {
+              "content": "Jira Request: {{ $json.qa_task }}\nPriority: {{ $json.priority }}\nContext: {{ $json.qa_context }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "jira-agent",
+      "name": "Jira Management Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.4,
+          "maxTokens": 1500
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Slack Communication Agent. Your role is to draft professional Slack messages for QA teams.\n\nCreate Slack messages for:\n- **Bug Notifications**: Alert teams about critical bugs\n- **Test Results**: Share test execution results\n- **Status Updates**: Provide project status updates\n- **Meeting Reminders**: Schedule and remind about QA meetings\n- **Release Notifications**: Announce releases and deployments\n- **Escalation Messages**: Escalate issues to stakeholders\n- **Daily Standups**: Prepare standup updates\n- **Retrospectives**: Facilitate team retrospectives\n\nFormat as professional, clear Slack messages with appropriate formatting and mentions.",
+              "role": "system"
+            },
+            {
+              "content": "Slack Request: {{ $json.qa_task }}\nPriority: {{ $json.priority }}\nContext: {{ $json.qa_context }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "slack-agent",
+      "name": "Slack Communication Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 2000
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Test Execution Agent. Your role is to plan and execute automated tests using MCP tools.\n\nProvide test execution guidance including:\n- **Test Strategy**: Plan automated test execution\n- **MCP Tool Selection**: Choose appropriate MCP tools for testing\n- **Test Scripts**: Generate test scripts and commands\n- **Environment Setup**: Configure test environments\n- **Data Preparation**: Prepare test data and fixtures\n- **Execution Plan**: Step-by-step execution instructions\n- **Result Analysis**: Analyze test results and failures\n- **Reporting**: Generate test execution reports\n\nInclude specific MCP tool commands and configurations for test execution.",
+              "role": "system"
+            },
+            {
+              "content": "Test Execution Request: {{ $json.qa_task }}\nPriority: {{ $json.priority }}\nRequired Tools: {{ $json.required_tools }}\nContext: {{ $json.qa_context }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "test-execution-agent",
+      "name": "Test Execution Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 600]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 1800
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S QA Analysis Agent. Your role is to analyze test results and quality metrics.\n\nProvide QA analysis including:\n- **Test Result Analysis**: Analyze test execution results\n- **Quality Metrics**: Calculate and interpret quality metrics\n- **Trend Analysis**: Identify patterns and trends in quality\n- **Risk Assessment**: Evaluate quality risks and issues\n- **Performance Analysis**: Analyze performance test results\n- **Coverage Analysis**: Evaluate test coverage and gaps\n- **Defect Analysis**: Analyze bug patterns and root causes\n- **Recommendations**: Provide improvement recommendations\n\nFormat as comprehensive analysis reports with actionable insights.",
+              "role": "system"
+            },
+            {
+              "content": "QA Analysis Request: {{ $json.qa_task }}\nPriority: {{ $json.priority }}\nContext: {{ $json.qa_context }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "qa-analysis-agent",
+      "name": "QA Analysis Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 700]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 2000
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S QA Documentation Agent. Your role is to create comprehensive QA documentation.\n\nCreate QA documentation including:\n- **Test Procedures**: Step-by-step testing procedures\n- **QA Guidelines**: Best practices and standards\n- **Tool Documentation**: How to use QA tools and frameworks\n- **Process Documentation**: QA processes and workflows\n- **Training Materials**: Onboarding and training guides\n- **Troubleshooting Guides**: Common issues and solutions\n- **API Documentation**: Testing API endpoints and methods\n- **User Guides**: End-user testing guides\n\nFormat as professional, comprehensive documentation with clear structure and examples.",
+              "role": "system"
+            },
+            {
+              "content": "Documentation Request: {{ $json.qa_task }}\nPriority: {{ $json.priority }}\nContext: {{ $json.qa_context }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "documentation-agent",
+      "name": "QA Documentation Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 800]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "qa_response",
+              "value": "={{ $json.message.content }}"
+            },
+            {
+              "name": "agent_type",
+              "value": "={{ $json.agent_type }}"
+            },
+            {
+              "name": "qa_task",
+              "value": "={{ $json.qa_task }}"
+            },
+            {
+              "name": "priority",
+              "value": "={{ $json.priority }}"
+            },
+            {
+              "name": "processing_time",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "qa-response-processor",
+      "name": "QA Response Processor",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.4,
+          "maxTokens": 1200
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S QA Action Executor. Your role is to convert QA agent responses into actionable steps and implementation guidance.\n\nTransform QA responses into:\n- **Actionable Steps**: Clear, implementable actions\n- **Tool Instructions**: Specific tool usage guidance\n- **Integration Steps**: How to integrate with existing tools\n- **Follow-up Actions**: Next steps and recommendations\n- **Quality Checks**: Validation and verification steps\n\nProvide practical, ready-to-use guidance for QA tasks.",
+              "role": "system"
+            },
+            {
+              "content": "QA Response: {{ $json.qa_response }}\nAgent Type: {{ $json.agent_type }}\nQA Task: {{ $json.qa_task }}\nPriority: {{ $json.priority }}\n\nPlease provide actionable next steps and implementation guidance.",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "qa-action-executor",
+      "name": "QA Action Executor (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "final_qa_response",
+              "value": "={{ $json.message.content }}"
+            },
+            {
+              "name": "qa_agent_used",
+              "value": "={{ $json.agent_type }}"
+            },
+            {
+              "name": "qa_task_completed",
+              "value": "={{ $json.qa_task }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "qa-output-formatter",
+      "name": "QA Output Formatter",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.final_qa_response }}",
+        "options": {}
+      },
+      "id": "qa-webhook-response",
+      "name": "QA Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "qa-webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "qa-input-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qa-input-processor": {
+      "main": [
+        [
+          {
+            "node": "qa-task-classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qa-task-classifier": {
+      "main": [
+        [
+          {
+            "node": "qa-agent-router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qa-agent-router": {
+      "main": [
+        [
+          {
+            "node": "bug-report-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "test-plan-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "checklist-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "jira-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "slack-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "test-execution-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "qa-analysis-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "documentation-agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "bug-report-agent": {
+      "main": [
+        [
+          {
+            "node": "qa-response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "test-plan-agent": {
+      "main": [
+        [
+          {
+            "node": "qa-response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "checklist-agent": {
+      "main": [
+        [
+          {
+            "node": "qa-response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "jira-agent": {
+      "main": [
+        [
+          {
+            "node": "qa-response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "slack-agent": {
+      "main": [
+        [
+          {
+            "node": "qa-response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "test-execution-agent": {
+      "main": [
+        [
+          {
+            "node": "qa-response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qa-analysis-agent": {
+      "main": [
+        [
+          {
+            "node": "qa-response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "documentation-agent": {
+      "main": [
+        [
+          {
+            "node": "qa-response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qa-response-processor": {
+      "main": [
+        [
+          {
+            "node": "qa-action-executor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qa-action-executor": {
+      "main": [
+        [
+          {
+            "node": "qa-output-formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qa-output-formatter": {
+      "main": [
+        [
+          {
+            "node": "qa-webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "jarvis-qa",
+      "name": "J.A.R.V.I.S QA"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
+
+
+
+
+
+
+
+
+

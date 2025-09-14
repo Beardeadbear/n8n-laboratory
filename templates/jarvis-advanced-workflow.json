@@ -1,0 +1,576 @@
+{
+  "name": "J.A.R.V.I.S Advanced Self-Scaling System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis-advanced",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "J.A.R.V.I.S Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "jarvis-advanced-input"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "user_input",
+              "value": "={{ $json.body.message || $json.body.text || $json.body.input }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.body.user_id || 'anonymous' }}"
+            },
+            {
+              "name": "session_id",
+              "value": "={{ $json.body.session_id || $json.headers['x-session-id'] || 'default' }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "request_type",
+              "value": "={{ $json.body.request_type || 'general' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "input-processor",
+      "name": "Input Processor",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 1500
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Advanced Task Classifier Agent. Your role is to:\n\n1. Analyze user input and understand the ultimate goal\n2. Determine if this requires tool planning, content creation, calculations, or web search\n3. Assess complexity and resource requirements\n4. Route to the appropriate specialized agent\n5. Extract key parameters and constraints\n\nAvailable routing options:\n- TOOL_PLANNING: For complex tasks requiring multiple tools/nodes\n- CONTENT: For writing, summarizing, creative tasks\n- MATH: For calculations, data analysis, computations\n- WEB_SEARCH: For information gathering from the internet\n- WORKFLOW_BUILDING: For creating new n8n workflows\n\nRespond with JSON format:\n{\n  \"goal\": \"clear description of what user wants to achieve\",\n  \"agent_type\": \"TOOL_PLANNING|CONTENT|MATH|WEB_SEARCH|WORKFLOW_BUILDING\",\n  \"complexity\": \"SIMPLE|MODERATE|COMPLEX|ENTERPRISE\",\n  \"estimated_resources\": \"list of resources needed\",\n  \"constraints\": \"any limitations or requirements\",\n  \"success_criteria\": \"how to measure success\"\n}",
+              "role": "system"
+            },
+            {
+              "content": "User Input: {{ $json.user_input }}\nUser ID: {{ $json.user_id }}\nSession: {{ $json.session_id }}\nRequest Type: {{ $json.request_type }}\nTimestamp: {{ $json.timestamp }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "task-classifier",
+      "name": "Task Classifier Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.agent_type }}",
+              "operation": "equal",
+              "value2": "TOOL_PLANNING"
+            }
+          ]
+        }
+      },
+      "id": "agent-router",
+      "name": "Advanced Agent Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 2000
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Tool Planner Agent. Your role is to:\n\n1. Analyze the user's goal and break it down into actionable steps\n2. Recommend specific n8n nodes and tools needed to achieve the goal\n3. Create a detailed execution plan with dependencies\n4. Suggest alternative approaches and fallback options\n5. Estimate resource requirements and potential challenges\n\nAvailable n8n nodes and tools:\n- HTTP Request: API calls, web scraping\n- Email: Send emails, notifications\n- Slack/Discord: Team communication\n- Google Drive: File management\n- Database nodes: Data storage and retrieval\n- AI nodes: OpenAI, Claude, Gemini for processing\n- Code nodes: Custom JavaScript/Python logic\n- Webhook: External integrations\n- Schedule: Automated triggers\n- File operations: Read/write files\n- Image processing: Image manipulation\n- PDF processing: Document handling\n- Vector databases: Pinecone, Qdrant for embeddings\n- MCP tools: Model Context Protocol integrations\n\nRespond with JSON format:\n{\n  \"execution_plan\": [\n    {\n      \"step\": 1,\n      \"action\": \"description of what to do\",\n      \"node_type\": \"specific n8n node to use\",\n      \"configuration\": \"key settings needed\",\n      \"dependencies\": \"what needs to happen first\",\n      \"expected_output\": \"what this step produces\"\n    }\n  ],\n  \"alternative_approaches\": [\"list of alternative methods\"],\n  \"resource_requirements\": \"what APIs, credentials, or services needed\",\n  \"potential_challenges\": \"possible issues and solutions\",\n  \"estimated_complexity\": \"SIMPLE|MODERATE|COMPLEX\",\n  \"success_metrics\": \"how to measure if goal is achieved\"\n}",
+              "role": "system"
+            },
+            {
+              "content": "Goal: {{ $json.goal }}\nComplexity: {{ $json.complexity }}\nConstraints: {{ $json.constraints }}\nSuccess Criteria: {{ $json.success_criteria }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "tool-planner",
+      "name": "Tool Planner Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 1800
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Content Agent. Your role is to:\n\n1. Create high-quality written content based on user requirements\n2. Summarize, rewrite, or expand existing content\n3. Generate creative and engaging materials\n4. Ensure content meets specific style and tone requirements\n5. Provide multiple versions and alternatives when requested\n\nBe creative, accurate, and engaging in your content creation.",
+              "role": "system"
+            },
+            {
+              "content": "Content Request: {{ $json.goal }}\nComplexity: {{ $json.complexity }}\nConstraints: {{ $json.constraints }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "content-agent",
+      "name": "Content Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 1500
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Math Agent. Your role is to:\n\n1. Perform complex calculations and mathematical operations\n2. Analyze data and provide statistical insights\n3. Solve mathematical problems step by step\n4. Create formulas and equations\n5. Validate calculations and provide error checking\n\nBe precise, accurate, and show your work clearly.",
+              "role": "system"
+            },
+            {
+              "content": "Math Request: {{ $json.goal }}\nComplexity: {{ $json.complexity }}\nConstraints: {{ $json.constraints }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "math-agent",
+      "name": "Math Agent (GPT-4o-mini)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "model": "gemini-pro",
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 1600
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Web Agent. Your role is to:\n\n1. Search the web for current information and data\n2. Analyze search results and provide comprehensive summaries\n3. Find relevant resources, articles, and documentation\n4. Verify information from multiple sources\n5. Provide citations and source links\n\nUse web search capabilities to gather accurate, up-to-date information.",
+              "role": "system"
+            },
+            {
+              "content": "Web Search Request: {{ $json.goal }}\nComplexity: {{ $json.complexity }}\nConstraints: {{ $json.constraints }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "web-agent",
+      "name": "Web Agent (Gemini)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 2500
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Workflow Builder Agent. Your role is to:\n\n1. Create complete n8n workflow JSON configurations\n2. Design node connections and data flow\n3. Configure node parameters and settings\n4. Implement error handling and validation\n5. Generate ready-to-import workflow files\n\nCreate complete, functional n8n workflows that can be imported directly. Include all necessary nodes, connections, and configurations.",
+              "role": "system"
+            },
+            {
+              "content": "Workflow Request: {{ $json.goal }}\nComplexity: {{ $json.complexity }}\nConstraints: {{ $json.constraints }}\nOriginal Input: {{ $json.user_input }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "workflow-builder",
+      "name": "Workflow Builder Agent (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1120, 600]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "agent_response",
+              "value": "={{ $json.message.content }}"
+            },
+            {
+              "name": "agent_type",
+              "value": "={{ $json.agent_type }}"
+            },
+            {
+              "name": "original_goal",
+              "value": "={{ $json.goal }}"
+            },
+            {
+              "name": "complexity",
+              "value": "={{ $json.complexity }}"
+            },
+            {
+              "name": "processing_time",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "response-processor",
+      "name": "Response Processor",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.4,
+          "maxTokens": 1200
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Action Executor. Your role is to:\n\n1. Take the specialized agent's response and create actionable steps\n2. If it's a tool planning response, break it down into implementable actions\n3. If it's a workflow, provide step-by-step implementation guide\n4. If it's content, format it for immediate use\n5. Always provide clear next steps and implementation guidance\n\nTransform the agent response into practical, actionable instructions that the user can follow immediately.",
+              "role": "system"
+            },
+            {
+              "content": "Agent Response: {{ $json.agent_response }}\nAgent Type: {{ $json.agent_type }}\nOriginal Goal: {{ $json.original_goal }}\nComplexity: {{ $json.complexity }}\n\nPlease provide actionable next steps and implementation guidance.",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "action-executor",
+      "name": "Action Executor (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "final_response",
+              "value": "={{ $json.message.content }}"
+            },
+            {
+              "name": "agent_used",
+              "value": "={{ $json.agent_type }}"
+            },
+            {
+              "name": "goal_achieved",
+              "value": "={{ $json.original_goal }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "output-formatter",
+      "name": "Output Formatter",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.final_response }}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "J.A.R.V.I.S Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "feedback_request",
+              "value": "Was this response helpful? Did it achieve your goal? Please provide feedback (1-5 scale) and any suggestions for improvement."
+            },
+            {
+              "name": "session_id",
+              "value": "={{ $json.session_id }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.user_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "feedback-collector",
+      "name": "Feedback Collector",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [2000, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.feedback_request }}",
+        "options": {}
+      },
+      "id": "feedback-response",
+      "name": "Feedback Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2220, 500]
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "input-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "input-processor": {
+      "main": [
+        [
+          {
+            "node": "task-classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "task-classifier": {
+      "main": [
+        [
+          {
+            "node": "agent-router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agent-router": {
+      "main": [
+        [
+          {
+            "node": "tool-planner",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "content-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "math-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "web-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "workflow-builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "tool-planner": {
+      "main": [
+        [
+          {
+            "node": "response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "content-agent": {
+      "main": [
+        [
+          {
+            "node": "response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "math-agent": {
+      "main": [
+        [
+          {
+            "node": "response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "web-agent": {
+      "main": [
+        [
+          {
+            "node": "response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "workflow-builder": {
+      "main": [
+        [
+          {
+            "node": "response-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "response-processor": {
+      "main": [
+        [
+          {
+            "node": "action-executor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "action-executor": {
+      "main": [
+        [
+          {
+            "node": "output-formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "output-formatter": {
+      "main": [
+        [
+          {
+            "node": "webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "feedback-collector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "feedback-collector": {
+      "main": [
+        [
+          {
+            "node": "feedback-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "jarvis-advanced",
+      "name": "J.A.R.V.I.S Advanced"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
+
+
+
+
+
+
+
+
+

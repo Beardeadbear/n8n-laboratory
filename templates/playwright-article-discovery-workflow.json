@@ -1,0 +1,212 @@
+{
+  "name": "Playwright Article Discovery & Storage",
+  "nodes": [
+    {
+      "parameters": {
+        "description": "Start article discovery workflow for Fliplet community"
+      },
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Define the base website to crawl\nconst baseUrl = \"https://community.fliplet.com\";\nconst maxPages = 50; // Limit to prevent infinite crawling\n\n// Initial pages to start discovery\nconst startPages = [\n  \"/\",\n  \"/help\",\n  \"/tutorials\", \n  \"/faq\",\n  \"/api-docs\"\n];\n\nreturn {\n  json: {\n    baseUrl: baseUrl,\n    startPages: startPages,\n    maxPages: maxPages,\n    discoveredPages: [],\n    processedPages: []\n  }\n};"
+      },
+      "id": "code-website-config",
+      "name": "Code: Website Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.baseUrl }}{{ $json.startPages[0] }}",
+        "options": {
+          "waitUntil": "networkidle",
+          "timeout": 30000
+        }
+      },
+      "id": "playwright-navigate",
+      "name": "Playwright: Navigate to Page",
+      "type": "n8n-nodes-base.playwright",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract all article links from the current page\nconst page = $input.first().json;\nconst baseUrl = $('Code: Website Config').first().json.baseUrl;\n\n// Extract links that look like articles\nconst articleLinks = await page.evaluate((baseUrl) => {\n  const links = Array.from(document.querySelectorAll('a[href]'));\n  const articleUrls = new Set();\n  \n  links.forEach(link => {\n    const href = link.href;\n    // Look for URLs that might be articles\n    if (href.includes(baseUrl) && \n        (href.includes('/help/') || \n         href.includes('/tutorials/') || \n         href.includes('/faq/') || \n         href.includes('/api-docs/') ||\n         href.includes('/article/') ||\n         href.includes('/post/') ||\n         href.includes('/guide/') ||\n         href.includes('/docs/')) &&\n        !href.includes('#') &&\n        !href.includes('?') &&\n        href !== baseUrl &&\n        href !== baseUrl + '/') {\n      articleUrls.add(href);\n    }\n  });\n  \n  return Array.from(articleUrls);\n}, baseUrl);\n\n// Get current page info\nconst currentPageInfo = await page.evaluate(() => {\n  const title = document.querySelector('h1, .title, .post-title')?.textContent || \n                document.title || \n                'Untitled';\n  \n  const metaDesc = document.querySelector('meta[name=\"description\"]')?.content || '';\n  \n  return {\n    title: title.trim(),\n    metaDescription: metaDesc,\n    url: window.location.href\n  };\n});\n\n// Combine current page with discovered articles\nconst allPages = [currentPageInfo, ...articleLinks.map(url => ({ url }))];\n\nreturn {\n  json: {\n    discoveredPages: allPages,\n    baseUrl: baseUrl,\n    currentPage: currentPageInfo\n  }\n};"
+      },
+      "id": "code-extract-links",
+      "name": "Code: Extract Article Links",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "waitUntil": "networkidle",
+          "timeout": 30000
+        }
+      },
+      "id": "playwright-get-article",
+      "name": "Playwright: Get Article Content",
+      "type": "n8n-nodes-base.playwright",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and clean article content\nconst page = $input.first().json;\nconst url = $('Code: Extract Article Links').first().json.currentPage?.url || \n            $('Code: Extract Article Links').first().json.discoveredPages[0]?.url;\n\n// Extract main content\nconst articleData = await page.evaluate(() => {\n  // Try multiple selectors for main content\n  const selectors = [\n    'main', \n    'article', \n    '.content', \n    '.post-content', \n    '.entry-content',\n    '.post-body',\n    '.article-content'\n  ];\n  \n  let mainContent = '';\n  let title = '';\n  \n  // Find main content\n  for (const selector of selectors) {\n    const element = document.querySelector(selector);\n    if (element) {\n      mainContent = element.innerHTML;\n      break;\n    }\n  }\n  \n  // Fallback to body if no main content found\n  if (!mainContent) {\n    mainContent = document.body.innerHTML;\n  }\n  \n  // Extract title\n  title = document.querySelector('h1, .title, .post-title, .entry-title')?.textContent || \n           document.title || \n           'Untitled';\n  \n  // Extract meta description\n  const metaDesc = document.querySelector('meta[name=\"description\"]')?.content || '';\n  \n  // Extract author if available\n  const author = document.querySelector('.author, .byline, .post-author')?.textContent || '';\n  \n  // Extract publish date if available\n  const publishDate = document.querySelector('.date, .published, .post-date')?.textContent || '';\n  \n  return {\n    title: title.trim(),\n    content: mainContent,\n    metaDescription: metaDesc,\n    author: author.trim(),\n    publishDate: publishDate.trim(),\n    url: window.location.href,\n    timestamp: new Date().toISOString()\n  };\n});\n\nreturn {\n  json: {\n    ...articleData,\n    baseUrl: $('Code: Website Config').first().json.baseUrl\n  }\n};"
+      },
+      "id": "code-extract-content",
+      "name": "Code: Extract Article Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean and process the extracted HTML content\nconst data = $input.first().json;\nconst html = data.content;\nconst title = data.title;\nconst url = data.url;\nconst author = data.author;\nconst publishDate = data.publishDate;\n\nfunction cleanHtml(html) {\n  // Remove script and style tags\n  let cleaned = html.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '');\n  cleaned = cleaned.replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '');\n  \n  // Convert line breaks and paragraphs\n  cleaned = cleaned.replace(/<br\\s*\\/?>/gi, '\\n');\n  cleaned = cleaned.replace(/<\\/p>/gi, '\\n\\n');\n  cleaned = cleaned.replace(/<\\/div>/gi, '\\n');\n  cleaned = cleaned.replace(/<\\/h[1-6]>/gi, '\\n\\n');\n  \n  // Remove all HTML tags\n  cleaned = cleaned.replace(/<[^>]*>/g, '');\n  \n  // Decode HTML entities\n  cleaned = cleaned.replace(/&amp;/g, '&');\n  cleaned = cleaned.replace(/&lt;/g, '<');\n  cleaned = cleaned.replace(/&gt;/g, '>');\n  cleaned = cleaned.replace(/&quot;/g, '\"');\n  cleaned = cleaned.replace(/&#39;/g, \"'\");\n  cleaned = cleaned.replace(/&nbsp;/g, ' ');\n  \n  // Clean up whitespace\n  cleaned = cleaned.replace(/\\n\\s*\\n/g, '\\n\\n');\n  cleaned = cleaned.replace(/\\s+/g, ' ');\n  cleaned = cleaned.trim();\n  \n  return cleaned;\n}\n\nfunction extractStructuredContent(text) {\n  // Split into logical sections\n  const sections = text.split(/\\n\\n+/).filter(section => \n    section.trim().length > 50\n  );\n  \n  // Create table of contents\n  const toc = sections.map((section, index) => {\n    const firstLine = section.split('\\n')[0];\n    return `${index + 1}. ${firstLine.substring(0, 100)}...`;\n  }).join('\\n');\n  \n  return {\n    sections: sections,\n    tableOfContents: toc,\n    wordCount: text.split(/\\s+/).length\n  };\n}\n\nconst cleanedContent = cleanHtml(html);\nconst structured = extractStructuredContent(cleanedContent);\n\n// Generate a clean filename\nconst cleanTitle = title.replace(/[^a-zA-Z0-9\\s-]/g, '').replace(/\\s+/g, '-').substring(0, 50);\nconst filename = `${cleanTitle}-${new Date().toISOString().split('T')[0]}`;\n\nreturn {\n  json: {\n    url: url,\n    originalTitle: title,\n    author: author,\n    publishDate: publishDate,\n    cleanContent: cleanedContent,\n    sections: structured.sections,\n    tableOfContents: structured.tableOfContents,\n    wordCount: structured.wordCount,\n    timestamp: new Date().toISOString(),\n    filename: filename,\n    category: 'Fliplet Community Articles'\n  }\n};"
+      },
+      "id": "code-process-content",
+      "name": "Code: Process Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "name": "={{ $json.filename }}",
+        "parents": "1BxiMVsL38TnPVIHnzrY3Ipdx08tSfIAV",
+        "content": "{{ $json.originalTitle }}\n\nSource: {{ $json.url }}\nAuthor: {{ $json.author }}\nPublished: {{ $json.publishDate }}\nExtracted: {{ $json.timestamp }}\nWord Count: {{ $json.wordCount }}\nCategory: {{ $json.category }}\n\nTABLE OF CONTENTS\n{{ $json.tableOfContents }}\n\n---\n\n{{ $json.cleanContent }}"
+      },
+      "id": "google-drive-create",
+      "name": "Google Drive: Create Doc",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "message": "Successfully created document: {{ $json.name }}\n\nDocument Link: {{ $json.webViewLink }}\n\nArticle: {{ $('Code: Process Content').first().json.originalTitle }}\nSource: {{ $('Code: Process Content').first().json.url }}\nWord Count: {{ $('Code: Process Content').first().json.wordCount }}"
+      },
+      "id": "success-notification",
+      "name": "Success Notification",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code: Website Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Website Config": {
+      "main": [
+        [
+          {
+            "node": "Playwright: Navigate to Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Playwright: Navigate to Page": {
+      "main": [
+        [
+          {
+            "node": "Code: Extract Article Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Extract Article Links": {
+      "main": [
+        [
+          {
+            "node": "Playwright: Get Article Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Playwright: Get Article Content": {
+      "main": [
+        [
+          {
+            "node": "Code: Extract Article Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Extract Article Content": {
+      "main": [
+        [
+          {
+            "node": "Code: Process Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Process Content": {
+      "main": [
+        [
+          {
+            "node": "Google Drive: Create Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive: Create Doc": {
+      "main": [
+        [
+          {
+            "node": "Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "playwright-article-discovery",
+  "tags": [
+    "playwright",
+    "mcp",
+    "web-scraping",
+    "google-drive",
+    "article-parsing"
+  ]
+}

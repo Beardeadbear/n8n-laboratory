@@ -1,0 +1,185 @@
+{
+  "name": "AI Agent MCP Website Parser",
+  "nodes": [
+    {
+      "parameters": {
+        "description": "Start AI Agent website parsing workflow"
+      },
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Configuration for the AI Agent\nconst websiteConfig = {\n  targetUrl: \"https://community.fliplet.com\",\n  description: \"Parse the Fliplet community website to extract all articles and documentation\",\n  outputFormat: \"structured content with metadata\",\n  maxPages: 50\n};\n\nreturn {\n  json: {\n    websiteConfig: websiteConfig,\n    instructions: `You are a web scraping AI agent. Your task is to:\n\n1. Navigate to ${websiteConfig.targetUrl}\n2. Discover all article/documentation pages on the website\n3. Extract the content from each page\n4. Organize the data into structured format\n5. Save everything to a file\n\nUse the MCP client to interact with the website. Be thorough but respectful of the website's resources.`\n  }\n};"
+      },
+      "id": "code-config",
+      "name": "Code: Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "endpoint": "http://localhost:3000/mcp",
+        "serverTransport": "Server Sent Events (Deprecated)",
+        "authentication": "None",
+        "toolsToInclude": "All"
+      },
+      "id": "mcp-client",
+      "name": "MCP Client",
+      "type": "n8n-nodes-base.mcpClient",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4",
+          "mode": "list"
+        },
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 4000
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an expert web scraping AI agent. You have access to Playwright MCP tools to interact with websites. Your goal is to systematically discover and extract content from websites.\n\n**Your Process:**\n1. **Navigate** to the target website using browser_navigate\n2. **Discover** all relevant pages by following links and analyzing the site structure\n3. **Extract** content from each page using browser_snapshot and other tools\n4. **Organize** the data into a structured format\n5. **Save** everything to a file\n\n**Available Playwright MCP Tools:**\n- `browser_navigate`: Navigate to URLs\n- `browser_snapshot`: Get page content and accessibility info\n- `browser_take_screenshot`: Capture screenshots\n- `browser_wait_for`: Wait for content to load\n- `browser_tabs`: Manage multiple tabs\n- `browser_click`: Click on elements\n- `browser_type`: Type text into forms\n\n**Be Respectful:**\n- Add delays between requests\n- Don't overwhelm the server\n- Follow robots.txt if available\n- Extract only public content\n\n**Output Format:**\nCreate a comprehensive JSON file with:\n- Website metadata\n- List of discovered pages\n- Content from each page\n- Timestamps and source URLs\n- Structured content (cleaned HTML, text, metadata)\n\nUse the MCP tools efficiently and provide detailed progress updates."
+            },
+            {
+              "role": "user",
+              "content": "{{ $json.instructions }}"
+            }
+          ]
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent with MCP Tools",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process the AI Agent's response and extracted data\nconst aiResponse = $input.first().json;\nconst config = $('Code: Configuration').first().json.websiteConfig;\n\n// Extract the structured data from AI response\nlet extractedData = {\n  website: config.targetUrl,\n  timestamp: new Date().toISOString(),\n  pages: [],\n  summary: {\n    totalPages: 0,\n    totalContent: 0,\n    categories: []\n  }\n};\n\n// Try to parse the AI response for structured data\nif (aiResponse.message && aiResponse.message.content) {\n  try {\n    // Look for JSON data in the response\n    const content = aiResponse.message.content;\n    const jsonMatch = content.match(/```json\\s*([\\s\\S]*?)\\s*```/);\n    \n    if (jsonMatch) {\n      const parsedData = JSON.parse(jsonMatch[1]);\n      extractedData = { ...extractedData, ...parsedData };\n    } else {\n      // If no JSON found, create structured data from the response\n      extractedData.summary.description = content;\n      extractedData.pages = [{\n        url: config.targetUrl,\n        title: \"AI Agent Response\",\n        content: content,\n        timestamp: new Date().toISOString()\n      }];\n    }\n  } catch (error) {\n    console.log('Could not parse JSON from AI response:', error.message);\n    extractedData.summary.description = aiResponse.message.content;\n  }\n}\n\n// Generate filename\nconst timestamp = new Date().toISOString().split('T')[0];\nconst filename = `fliplet-community-${timestamp}.json`;\n\nreturn {\n  json: {\n    extractedData: extractedData,\n    filename: filename,\n    aiResponse: aiResponse,\n    config: config\n  }\n};"
+      },
+      "id": "code-process-response",
+      "name": "Code: Process AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "name": "={{ $json.filename }}",
+        "parents": "1BxiMVsL38TnPVIHnzrY3Ipdx08tSfIAV",
+        "content": "{{ JSON.stringify($json.extractedData, null, 2) }}"
+      },
+      "id": "google-drive-save",
+      "name": "Google Drive: Save Data",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "message": "✅ Website parsing completed!\n\n📊 **Summary:**\n- Website: {{ $json.config.targetUrl }}\n- Total Pages: {{ $json.extractedData.summary.totalPages }}\n- File Saved: {{ $json.filename }}\n\n📝 **AI Agent Report:**\n{{ $json.aiResponse.message.content.substring(0, 500) }}...\n\n🔗 **Google Drive Link:**\n{{ $json.webViewLink }}"
+      },
+      "id": "success-notification",
+      "name": "Success Notification",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code: Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Configuration": {
+      "main": [
+        [
+          {
+            "node": "MCP Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Client": {
+      "main": [
+        [
+          {
+            "node": "AI Agent with MCP Tools",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent with MCP Tools": {
+      "main": [
+        [
+          {
+            "node": "Code: Process AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Process AI Response": {
+      "main": [
+        [
+          {
+            "node": "Google Drive: Save Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive: Save Data": {
+      "main": [
+        [
+          {
+            "node": "Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "ai-agent-mcp-parser",
+  "tags": [
+    "ai-agent",
+    "mcp",
+    "web-scraping",
+    "playwright",
+    "website-parsing"
+  ]
+}

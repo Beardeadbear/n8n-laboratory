@@ -1,0 +1,434 @@
+{
+  "name": "J.A.R.V.I.S Memory Management System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis-memory",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "memory-webhook",
+      "name": "Memory Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "jarvis-memory-input"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "user_id",
+              "value": "={{ $json.body.user_id || 'anonymous' }}"
+            },
+            {
+              "name": "session_id",
+              "value": "={{ $json.body.session_id || 'default' }}"
+            },
+            {
+              "name": "action",
+              "value": "={{ $json.body.action || 'store' }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.body.content || $json.body.message }}"
+            },
+            {
+              "name": "context",
+              "value": "={{ $json.body.context || 'general' }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "memory-processor",
+      "name": "Memory Processor",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.action }}",
+              "operation": "equal",
+              "value2": "store"
+            }
+          ]
+        }
+      },
+      "id": "memory-router",
+      "name": "Memory Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 1000
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Memory Manager. Your role is to:\n\n1. Process and categorize information for storage\n2. Extract key insights and patterns\n3. Create searchable summaries\n4. Identify relationships between different pieces of information\n5. Generate metadata for efficient retrieval\n\nProcess the content and create a structured memory entry with:\n- Summary: Brief description of the content\n- Key Points: Important information extracted\n- Context: Relevant context and background\n- Tags: Searchable tags for categorization\n- Relationships: Connections to other stored information\n- Importance: Priority level (1-5)\n- Expiry: When this information might become outdated\n\nRespond with JSON format:\n{\n  \"summary\": \"brief summary of the content\",\n  \"key_points\": [\"list of important points\"],\n  \"context\": \"relevant context and background\",\n  \"tags\": [\"searchable\", \"tags\"],\n  \"relationships\": [\"related topics or concepts\"],\n  \"importance\": 3,\n  \"expiry\": \"2024-12-31\",\n  \"metadata\": {\n    \"user_id\": \"{{ $json.user_id }}\",\n    \"session_id\": \"{{ $json.session_id }}\",\n    \"timestamp\": \"{{ $json.timestamp }}\",\n    \"context\": \"{{ $json.context }}\"\n  }\n}",
+              "role": "system"
+            },
+            {
+              "content": "Content to store: {{ $json.content }}\nUser ID: {{ $json.user_id }}\nSession: {{ $json.session_id }}\nContext: {{ $json.context }}\nTimestamp: {{ $json.timestamp }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "memory-analyzer",
+      "name": "Memory Analyzer (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 1500
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are J.A.R.V.I.S Memory Retrieval Agent. Your role is to:\n\n1. Search through stored memories to find relevant information\n2. Understand user queries and find matching content\n3. Provide context-aware responses based on stored knowledge\n4. Identify patterns and connections in stored information\n5. Suggest related information that might be helpful\n\nSearch for information related to the user's query and provide:\n- Relevant memories found\n- Key insights and connections\n- Suggested follow-up information\n- Confidence level in the results\n\nRespond with JSON format:\n{\n  \"query\": \"{{ $json.content }}\",\n  \"relevant_memories\": [\n    {\n      \"id\": \"memory_id\",\n      \"summary\": \"brief summary\",\n      \"relevance_score\": 0.9,\n      \"key_points\": [\"relevant points\"]\n    }\n  ],\n  \"insights\": [\"key insights from the search\"],\n  \"connections\": [\"related topics or concepts\"],\n  \"suggestions\": [\"suggested follow-up information\"],\n  \"confidence\": 0.8\n}",
+              "role": "system"
+            },
+            {
+              "content": "Search query: {{ $json.content }}\nUser ID: {{ $json.user_id }}\nSession: {{ $json.session_id }}\nContext: {{ $json.context }}",
+              "role": "user"
+            }
+          ]
+        }
+      },
+      "id": "memory-retriever",
+      "name": "Memory Retriever (GPT-4o)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "https://api.supabase.com/v1/project/YOUR_PROJECT_ID/rest/v1/memories",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_ANON_KEY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_ANON_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "user_id",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "name": "session_id",
+              "value": "={{ $json.session_id }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.content }}"
+            },
+            {
+              "name": "processed_data",
+              "value": "={{ $json.message.content }}"
+            },
+            {
+              "name": "context",
+              "value": "={{ $json.context }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}"
+            },
+            {
+              "name": "created_at",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "supabase-store",
+      "name": "Store in Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://api.supabase.com/v1/project/YOUR_PROJECT_ID/rest/v1/memories",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "YOUR_SUPABASE_ANON_KEY"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_ANON_KEY"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "user_id",
+              "value": "eq.{{ $json.user_id }}"
+            },
+            {
+              "name": "select",
+              "value": "*"
+            },
+            {
+              "name": "order",
+              "value": "created_at.desc"
+            },
+            {
+              "name": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "supabase-retrieve",
+      "name": "Retrieve from Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "stored"
+            },
+            {
+              "name": "memory_id",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "store-response",
+      "name": "Store Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "retrieved"
+            },
+            {
+              "name": "results",
+              "value": "={{ $json.message.content }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "retrieve-response",
+      "name": "Retrieve Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "memory-webhook-response",
+      "name": "Memory Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "memory-webhook": {
+      "main": [
+        [
+          {
+            "node": "memory-processor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "memory-processor": {
+      "main": [
+        [
+          {
+            "node": "memory-router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "memory-router": {
+      "main": [
+        [
+          {
+            "node": "memory-analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "memory-retriever",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "memory-analyzer": {
+      "main": [
+        [
+          {
+            "node": "supabase-store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "memory-retriever": {
+      "main": [
+        [
+          {
+            "node": "supabase-retrieve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "supabase-store": {
+      "main": [
+        [
+          {
+            "node": "store-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "supabase-retrieve": {
+      "main": [
+        [
+          {
+            "node": "retrieve-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "store-response": {
+      "main": [
+        [
+          {
+            "node": "memory-webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "retrieve-response": {
+      "main": [
+        [
+          {
+            "node": "memory-webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "jarvis-memory",
+      "name": "J.A.R.V.I.S Memory"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
+
+
+
+
+
+
+
+
+

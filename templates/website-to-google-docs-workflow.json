@@ -1,0 +1,222 @@
+{
+  "name": "Website to Google Docs Parser",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// List of websites to parse\nconst websites = [\n  {\n    url: \"https://example.com\",\n    title: \"Example Website\",\n    category: \"Technology\"\n  },\n  {\n    url: \"https://another-site.com\",\n    title: \"Another Site\",\n    category: \"Business\"\n  }\n  // Add more websites as needed\n];\n\nreturn websites.map(site => ({ json: site }));"
+      },
+      "id": "website-list",
+      "name": "Website List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 30000,
+          "headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+          }
+        }
+      },
+      "id": "http-request",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json.data;\nconst url = $input.first().json.url;\nconst title = $input.first().json.title;\nconst category = $input.first().json.category;\n\n// Basic HTML tag removal and text extraction\nfunction extractText(html) {\n  // Remove script and style tags\n  let text = html.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '');\n  text = text.replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '');\n  \n  // Remove HTML tags but keep line breaks\n  text = text.replace(/<br\\s*\\/?>/gi, '\\n');\n  text = text.replace(/<\\/p>/gi, '\\n\\n');\n  text = text.replace(/<\\/div>/gi, '\\n');\n  text = text.replace(/<\\/h[1-6]>/gi, '\\n\\n');\n  \n  // Remove all remaining HTML tags\n  text = text.replace(/<[^>]*>/g, '');\n  \n  // Decode HTML entities\n  text = text.replace(/&amp;/g, '&');\n  text = text.replace(/&lt;/g, '<');\n  text = text.replace(/&gt;/g, '>');\n  text = text.replace(/&quot;/g, '\"');\n  text = text.replace(/&#39;/g, \"'\");\n  text = text.replace(/&nbsp;/g, ' ');\n  \n  // Clean up whitespace\n  text = text.replace(/\\n\\s*\\n/g, '\\n\\n');\n  text = text.replace(/\\s+/g, ' ');\n  text = text.trim();\n  \n  return text;\n}\n\n// Extract title from HTML if available\nfunction extractTitle(html) {\n  const titleMatch = html.match(/<title[^>]*>([^<]+)<\\/title>/i);\n  return titleMatch ? titleMatch[1].trim() : title;\n}\n\n// Extract main content (basic approach)\nfunction extractMainContent(html) {\n  // Try to find main content area\n  const mainMatch = html.match(/<main[^>]*>([\\s\\S]*?)<\\/main>/i);\n  if (mainMatch) return extractText(mainMatch[1]);\n  \n  const articleMatch = html.match(/<article[^>]*>([\\s\\S]*?)<\\/article>/i);\n  if (articleMatch) return extractText(articleMatch[1]);\n  \n  const contentMatch = html.match(/<div[^>]*class=\"[^\"]*content[^\"]*\"[^>]*>([\\s\\S]*?)<\\/div>/i);\n  if (contentMatch) return extractText(contentMatch[1]);\n  \n  // Fallback: extract from body\n  const bodyMatch = html.match(/<body[^>]*>([\\s\\S]*?)<\\/body>/i);\n  if (bodyMatch) return extractText(bodyMatch[1]);\n  \n  // Last resort: extract from entire HTML\n  return extractText(html);\n}\n\nconst extractedTitle = extractTitle(html);\nconst mainContent = extractMainContent(html);\n\n// Split content into sections (optional)\nconst sections = mainContent.split(/\\n\\n+/).filter(section => \n  section.trim().length > 50\n);\n\nreturn {\n  json: {\n    url: url,\n    originalTitle: title,\n    extractedTitle: extractedTitle,\n    category: category,\n    content: mainContent,\n    sections: sections,\n    wordCount: mainContent.split(/\\s+/).length,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "content-extraction",
+      "name": "Content Extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst content = data.content;\nconst title = data.extractedTitle;\nconst category = data.category;\n\n// Clean and structure content\nfunction processContent(text) {\n  // Remove excessive whitespace\n  let processed = text.replace(/\\n{3,}/g, '\\n\\n');\n  \n  // Add structure markers\n  processed = `# ${title}\\n\\n`;\n  processed += `**Source**: ${data.url}\\n`;\n  processed += `**Category**: ${category}\\n`;\n  processed += `**Extracted**: ${new Date().toLocaleDateString()}\\n\\n`;\n  processed += `---\\n\\n`;\n  \n  // Add content\n  processed += text;\n  \n  // Add footer\n  processed += `\\n\\n---\\n\\n`;\n  processed += `*This content was automatically extracted from ${data.url}*\\n`;\n  processed += `*Word count: ${data.wordCount}*\\n`;\n  processed += `*Extraction timestamp: ${data.timestamp}*`;\n  \n  return processed;\n}\n\n// Create article title for Google Docs\nfunction createArticleTitle(title, category) {\n  const cleanTitle = title.replace(/[^\\w\\s-]/g, '').trim();\n  const timestamp = new Date().toISOString().split('T')[0];\n  return `${category} - ${cleanTitle} (${timestamp})`;\n}\n\nconst processedContent = processContent(content);\nconst articleTitle = createArticleTitle(title, category);\n\nreturn {\n  json: {\n    ...data,\n    processedContent: processedContent,\n    articleTitle: articleTitle,\n    readyForGoogleDocs: true\n  }\n};"
+      },
+      "id": "content-processing",
+      "name": "Content Processing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "fileType": "document",
+        "name": "={{ $json.articleTitle }}",
+        "content": "={{ $json.processedContent }}",
+        "options": {}
+      },
+      "id": "google-drive-create",
+      "name": "Google Drive Create Doc",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "google-drive-credential",
+          "name": "Google Drive OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "googleDocId",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "googleDocUrl",
+              "value": "={{ $json.webViewLink }}"
+            },
+            {
+              "name": "message",
+              "value": "Article \"{{ $json.articleTitle }}\" created successfully"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "success-confirmation",
+      "name": "Success Confirmation",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "rate-limit-delay",
+      "name": "Rate Limit Delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [460, 500]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Website List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Website List": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Delay": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Content Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Extraction": {
+      "main": [
+        [
+          {
+            "node": "Content Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Processing": {
+      "main": [
+        [
+          {
+            "node": "Google Drive Create Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive Create Doc": {
+      "main": [
+        [
+          {
+            "node": "Success Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-28T12:00:00.000Z",
+  "versionId": "1"
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

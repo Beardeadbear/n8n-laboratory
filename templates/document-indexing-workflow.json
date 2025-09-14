@@ -1,0 +1,186 @@
+{
+  "name": "Document Indexing Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "document-update",
+        "responseMode": "respondToWebhook",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Document Update Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "document-webhook"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "fileId": "={{ $json.fileId }}",
+        "options": {
+          "fields": "id,name,mimeType,modifiedTime,size"
+        }
+      },
+      "id": "google-drive-get",
+      "name": "Get Document",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "google-drive-credential",
+          "name": "Google Drive"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const file = $input.first().json;\nconst content = file.content || '';\n\n// Extract text content (handle different file types)\nlet processedContent = '';\nif (file.mimeType.includes('text/') || file.mimeType.includes('application/')) {\n  processedContent = content;\n} else if (file.mimeType.includes('pdf') || file.mimeType.includes('document')) {\n  // For PDFs and Google Docs, content should already be extracted\n  processedContent = content;\n}\n\n// Create document chunks for vector storage\nconst chunks = [];\nconst chunkSize = 1000; // 1000 characters per chunk\nconst overlap = 200; // 200 character overlap\n\nfor (let i = 0; i < processedContent.length; i += chunkSize - overlap) {\n  const chunk = processedContent.slice(i, i + chunkSize);\n  if (chunk.trim().length > 50) { // Only add meaningful chunks\n    chunks.push({\n      content: chunk,\n      metadata: {\n        fileId: file.id,\n        fileName: file.name,\n        fileType: file.mimeType,\n        modifiedTime: file.modifiedTime,\n        chunkIndex: chunks.length\n      }\n    });\n  }\n}\n\nreturn {\n  json: {\n    chunks: chunks,\n    fileInfo: {\n      id: file.id,\n      name: file.name,\n      type: file.mimeType,\n      modified: file.modifiedTime\n    }\n  }\n};"
+      },
+      "id": "document-processing",
+      "name": "Document Processing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "createEmbedding",
+        "model": "text-embedding-ada-002",
+        "input": "={{ $json.chunks.map(chunk => chunk.content).join('\\n') }}",
+        "options": {}
+      },
+      "id": "create-embeddings",
+      "name": "Create Embeddings",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credential",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collectionName": "company_documents",
+        "points": "={\n  \"ids\": $json.chunks.map((_, index) => $json.fileInfo.id + '_' + index),\n  \"vectors\": $json.data.map(item => item.embedding),\n  \"payloads\": $json.chunks.map(chunk => ({\n    ...chunk.metadata,\n    content: chunk.content\n  }))\n}",
+        "options": {}
+      },
+      "id": "store-vectors",
+      "name": "Store Vectors",
+      "type": "n8n-nodes-base.qdrant",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "qdrantApi": {
+          "id": "qdrant-credential",
+          "name": "Qdrant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Document indexed successfully\",\n  \"chunksProcessed\": $json.chunks.length,\n  \"fileId\": $json.fileInfo.id\n}",
+        "options": {}
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Document Update Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Document": {
+      "main": [
+        [
+          {
+            "node": "Document Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document Processing": {
+      "main": [
+        [
+          {
+            "node": "Create Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Store Vectors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Vectors": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "document-indexing",
+      "name": "Document Indexing"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

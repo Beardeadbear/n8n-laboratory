@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  playwright-mcp:
+    image: mcr.microsoft.com/playwright/mcp:latest
+    container_name: playwright-mcp-server
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      # Mount a directory for persistent data if needed
+      - ./data:/app/data
+    restart: unless-stopped
+    # Optional: Run with additional capabilities
+    command: ["--caps=vision,pdf,verify"]
+    
+  # Alternative: Run with custom browser configuration
+  playwright-mcp-chromium:
+    image: mcr.microsoft.com/playwright/mcp:latest
+    container_name: playwright-mcp-chromium
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    command: ["--browser=chromium", "--caps=vision,pdf,verify"]
+    
+  # Alternative: Run with debugging enabled
+  playwright-mcp-debug:
+    image: mcr.microsoft.com/playwright/mcp:latest
+    container_name: playwright-mcp-debug
+    ports:
+      - "3002:3000"
+    environment:
+      - NODE_ENV=development
+      - DEBUG=playwright:*
+    restart: unless-stopped
+    command: ["--headless=false", "--caps=vision,pdf,verify"]
